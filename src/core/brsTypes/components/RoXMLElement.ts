@@ -22,6 +22,16 @@ function isCDataNode(node: XmlNode): node is XmlCDataNode {
     return node.type === "cdata";
 }
 
+/**
+ * XML 1.0 whitespace (space, tab, CR, LF). A text node made only of these
+ * characters is indentation or a newline between elements, not content.
+ * A node that contains any other character is kept in full, including the
+ * whitespace around that character. CDATA is never ignorable: it is explicit.
+ */
+function isIgnorableWhitespace(text: string): boolean {
+    return /^[\t\n\r ]*$/.test(text);
+}
+
 export class RoXMLElement extends BrsComponent implements BrsValue, BrsIterable {
     readonly kind = ValueKind.Object;
     private xmlElement: XmlElement;
@@ -77,19 +87,35 @@ export class RoXMLElement extends BrsComponent implements BrsValue, BrsIterable 
         element.val = textParts.join("");
     }
 
-    private static getTextFromElement(element: XmlElement): string {
+    /**
+     * Direct character data of `element`.
+     * When `skipIgnorableWhitespace` is set, whitespace-only text nodes are left
+     * out so GetText/GetBody agree with GetChildNodes. Callers that append to the
+     * stored body pass false and still see those nodes.
+     */
+    private static getTextFromElement(element: XmlElement, skipIgnorableWhitespace = false): string {
         if (!element.children || element.children.length === 0) {
-            return element.val ?? "";
+            const value = element.val ?? "";
+            if (skipIgnorableWhitespace && isIgnorableWhitespace(value)) {
+                return "";
+            }
+            return value;
         }
         const parts: string[] = [];
         for (const child of element.children) {
             if (isTextNode(child)) {
+                if (skipIgnorableWhitespace && isIgnorableWhitespace(child.text)) {
+                    continue;
+                }
                 parts.push(child.text);
             } else if (isCDataNode(child)) {
                 parts.push(child.cdata);
             }
         }
         if (parts.length === 0) {
+            if (skipIgnorableWhitespace) {
+                return "";
+            }
             return element.val ?? "";
         }
         return parts.join("");
@@ -202,7 +228,7 @@ export class RoXMLElement extends BrsComponent implements BrsValue, BrsIterable 
     }
 
     text() {
-        return new BrsString(RoXMLElement.getTextFromElement(this.getElement()));
+        return new BrsString(RoXMLElement.getTextFromElement(this.getElement(), true));
     }
 
     childElements() {
@@ -223,7 +249,10 @@ export class RoXMLElement extends BrsComponent implements BrsValue, BrsIterable 
             if (isElementNode(child)) {
                 nodes.add(new RoXMLElement(child));
             } else if (isTextNode(child)) {
-                nodes.add(new BrsString(child.text));
+                // Indentation and newlines between elements are not child nodes on a device.
+                if (!isIgnorableWhitespace(child.text)) {
+                    nodes.add(new BrsString(child.text));
+                }
             } else if (isCDataNode(child)) {
                 nodes.add(new BrsString(child.cdata));
             }
@@ -321,7 +350,12 @@ export class RoXMLElement extends BrsComponent implements BrsValue, BrsIterable 
         },
     });
 
-    /** Returns an roXMLList of child elements. If there are no child elements, returns invalid. */
+    /**
+     * Returns an roList of child elements and text. Whitespace-only text nodes
+     * (indentation and newlines between elements) are omitted. Text that contains
+     * any other character is returned as a string, with its surrounding whitespace
+     * intact. CDATA is always returned. Invalid when nothing remains.
+     */
     private readonly getChildNodes = new Callable("getChildNodes", {
         signature: {
             args: [],
@@ -380,7 +414,10 @@ export class RoXMLElement extends BrsComponent implements BrsValue, BrsIterable 
         },
     });
 
-    /** Returns any text contained in the element. */
+    /**
+     * Returns immediate body text, not text inside child elements.
+     * Whitespace-only text nodes are omitted; significant text is not trimmed.
+     */
     private readonly getText = new Callable("getText", {
         signature: {
             args: [],
