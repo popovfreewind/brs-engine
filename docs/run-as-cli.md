@@ -60,6 +60,7 @@ Options:
   -x, --ext-vol <path>      Path to directory or zip file from which `ext1:` will be mounted.
   -k, --deep-link <params>  Parameters to be passed to the application. (format: key=value,...)
   -y, --registry            Persist the simulated device registry (and channel credentials) on disk.
+  --channel-store <file>    JSON file of in-app products and purchases for roChannelStore when fakeServer is off.
   -v, --version             output the version number
   -h, --help                output usage information
 ```
@@ -172,8 +173,21 @@ $ brs-cli ../tests/test-sandbox.zip
 * The app runs on a dedicated worker thread, so you can control it interactively with the keyboard (see below) or via the `--ecp` option.
 * SceneGraph `Task` nodes run on their own worker threads, mirroring the browser engine and a real device.
 * Use the flag `--registry` to have the device registry data saved to the disk, and restored in following app executions. It also persists, in a separate `channel-credentials.json` file, the artifacts apps store with `StoreChannelCredData` (the simulated Roku cloud credential store), which are never part of the registry.
+* Use `--channel-store <file>` to mock in-app purchases. See [Mocking in-app purchases](#mocking-in-app-purchases).
 * Use the flag `--ext-vol` to mount a directory or zip archive as the `ext1:` volume.
 * To send parameters (deep linking) to the app, use the flag `--deep-link` followed by the parameters in the format: key=value,...
+
+### Mocking in-app purchases
+
+Channels that sell in-app products call `roChannelStore` or the `ChannelStore` node without `fakeServer(true)`. Pass a JSON file so those requests succeed against your catalog instead of an empty store:
+
+```console
+$ brs-cli --channel-store ./store.json --ecp my-channel.zip
+```
+
+The same object can be passed to the library as `deviceInfo.channelStore` (a path or the object) and to the browser API as `initialize({ channelStore })` or `execute(..., { channelStore })`. A string on the browser API is a URL `fetch` can read. The schema is documented in [customization](customization.md#mocking-in-app-purchases).
+
+With no file, `GetCatalog`, `GetStoreCatalog`, `GetPurchases` and `GetAllPurchases` still return status 1 and an empty list. `DoOrder` succeeds unless the file sets `orderResult`. A successful order is added to the owned list for that run. `fakeServer(true)` inside the channel keeps using `pkg:/csfake/*.xml` and ignores this file.
 
 ### Showing Screen as ASCII Rendering on the Terminal
 

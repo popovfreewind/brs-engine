@@ -54,6 +54,45 @@ describe.concurrent("cli", () => {
         ]);
     }, 30000);
 
+    it("Channel Store mock file", async () => {
+        let command = [
+            "node",
+            brsCliPath,
+            "-r channel-store-mock",
+            "--channel-store channel-store-mock/store.json",
+            "source/main.brs",
+            "-c 0",
+        ].join(" ");
+
+        let { stdout } = await exec(command, {
+            cwd: path.join(__dirname, "resources"),
+        });
+        expect(stdout.split("\n").map((line) => line.trimEnd())).toEqual([
+            "catalog 1 Success",
+            "test_product_1 Test Product $0.99 Consumable",
+            "test_product_2 Test Subscription $4.99 MonthlySub",
+            "storeCatalog 1 Success",
+            "test_product_1 Test Product $0.99 Consumable",
+            "test_product_2 Test Subscription $4.99 MonthlySub",
+            "purchases 1 Success",
+            "test_product_2 $4.99 Valid",
+            "allPurchases 1 Success",
+            "test_product_2 $4.99 Valid",
+            "test_product_1 $0.99 Invalid",
+            "doOrder true",
+            "order 1 Success",
+            "test_product_1 $0.99 $0.99 1",
+            "owned 1 Success",
+            "test_product_2 $4.99 Valid",
+            "test_product_1 $0.99 Valid",
+            "cleared false",
+            "empty -4 Invalid request",
+            "------ Finished 'main.brs' execution [EXIT_USER_NAV] ------",
+            "",
+            "",
+        ]);
+    }, 30000);
+
     it("Texture Manager Test", async () => {
         let command = ["node", brsCliPath, "roTextureManager.brs", "-c 0"].join(" ");
 

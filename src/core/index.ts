@@ -51,6 +51,7 @@ export * from "./error/TypeMismatch";
 export * from "./LexerParser";
 export * from "./common";
 export * from "./device/BrsDevice";
+export { configureChannelStore } from "./device/ChannelStoreCatalog";
 export * from "./brsTypes/components/RoFontRegistry";
 export * from "./device/FileSystem";
 export * from "./packageEncryption";
