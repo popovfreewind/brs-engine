@@ -185,6 +185,8 @@ const deviceData = {
     displayMode: "1080p",
     customFeatures: [],
     localIps: ["192.168.1.100"],
+    // Optional in-app purchase mock (path or object). See docs/customization.md.
+    // channelStore: path.join(__dirname, "store.json"),
 };
 
 // Create payload from BrightScript files

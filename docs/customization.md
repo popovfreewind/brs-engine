@@ -64,6 +64,50 @@ sub onRequestStatus()
 end sub
 ```
 
+### Mocking in-app purchases
+
+`roChannelStore` and the `ChannelStore` node answer catalog, purchase and order requests without `fakeServer(true)`, so a channel can be exercised the way it runs on a device. Provide the catalog on the device:
+
+| Host | How |
+| --- | --- |
+| CLI | `brs-cli --channel-store ./store.json <app>` |
+| Node library | `device.channelStore` on the payload: a filesystem path or the object below |
+| Browser API | `initialize({ channelStore })` or `execute(file, data, { channelStore })`: the object, or a URL |
+
+```json
+{
+    "orderResult": "success",
+    "products": [
+        {
+            "code": "test_product_1",
+            "name": "Test Product",
+            "price": "$0.99",
+            "productType": "Consumable"
+        }
+    ],
+    "purchases": [
+        {
+            "code": "test_product_1",
+            "name": "Test Product",
+            "price": "$0.99",
+            "productType": "Consumable",
+            "qty": 1,
+            "status": "Valid"
+        }
+    ]
+}
+```
+
+| Field | Meaning |
+| --- | --- |
+| `products` | Catalog returned by `GetCatalog` and `GetStoreCatalog`. `price` is the localized string a device puts in `cost` (for example `"$0.99"`). `productType` is a Roku product type such as `"Consumable"` or `"MonthlySub"`. |
+| `purchases` | Already-owned products. `status` `"Valid"` is returned by `GetPurchases`; `"Invalid"` is included only in `GetAllPurchases`. |
+| `orderResult` | `DoOrder` outcome. `"success"` (default) returns status 1 and adds the order to `purchases` for the rest of the run. `"cancel"` returns status 2 (`Interrupted`), the code a device sends when the customer backs out of the confirmation screen. `"failure"` returns status -3 (`Unknown Error`). |
+
+Omitted file, or a file with empty lists: catalog and purchase requests still return status 1 and an empty list. An empty cart returns status -4 (`Invalid request`). `SetOrder` and `ClearOrder` work as on a device. Calling `fakeServer(true)` switches that component back to the `pkg:/csfake/*.xml` fixtures and ignores this mock.
+
+A finished order (success, cancel or failure) releases the remote key that was down when the order started. On a device the purchase screen owns that key; leaving it held made the next Select press look like a repeat and the focused button never received it.
+
 ### CORS Proxy Configuration
 
 -   See `App Manifest` below to enable CORS proxy for your app

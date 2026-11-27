@@ -66,6 +66,42 @@ export interface DeviceInfo {
     uiTransitions?: boolean;
     corsProxy?: string;
     extensions?: Map<SupportedExtension, string>;
+    /**
+     * In-app purchase mock for `roChannelStore` / `ChannelStore` when `fakeServer` is off.
+     * A string is a filesystem path (Node) or, from the browser API, a URL fetched before launch.
+     * An object is the catalog itself. See `ChannelStoreMock`.
+     */
+    channelStore?: string | ChannelStoreMock;
+}
+
+/**
+ * In-app purchase catalog supplied by the host. Product `price` is the localized string Roku
+ * returns (for example `"$0.99"`); responses expose it as `cost`. `orderResult` selects the
+ * `DoOrder` outcome: `"success"` (default), `"cancel"` (status 2, Interrupted) or `"failure"`
+ * (status -3, Unknown Error).
+ */
+export interface ChannelStoreMock {
+    products?: ChannelStoreProduct[];
+    purchases?: ChannelStorePurchase[];
+    orderResult?: string;
+}
+
+/** One product offered by the mocked channel store. */
+export interface ChannelStoreProduct {
+    code: string;
+    name: string;
+    /** Localized price as a Roku device returns it, for example `"$0.99"`. */
+    price: string;
+    productType: string;
+}
+
+/** A purchase already owned, or recorded after a successful `DoOrder` in this session. */
+export interface ChannelStorePurchase extends ChannelStoreProduct {
+    qty?: number;
+    purchaseId?: string;
+    purchaseDate?: string;
+    /** `"Valid"` (active; `GetPurchases`) or `"Invalid"` (expired; `GetAllPurchases` only). */
+    status?: string;
 }
 
 export enum LogLevel {

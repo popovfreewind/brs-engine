@@ -14,6 +14,7 @@ import {
     DataType,
     DebugCommand,
     DeviceInfo,
+    ChannelStoreMock,
     getCacheVolume,
     NDKStart,
     RemoteType,
@@ -224,6 +225,9 @@ async function initializeEngine(customDeviceInfo?: Partial<DeviceInfo>, options:
             }
         }
         Object.assign(deviceData, customDeviceInfo);
+        if (typeof deviceData.channelStore === "string") {
+            deviceData.channelStore = await fetchChannelStore(deviceData.channelStore);
+        }
     }
     if (typeof options.disableDebug === "boolean") {
         disableDebug = options.disableDebug;
@@ -427,6 +431,21 @@ export function execute(filePath: string, fileData: any, options: any = {}, deep
 }
 
 function startApp(filePath: string, fileData: any, options: any, deepLink?: Map<string, string>) {
+    if (typeof options.channelStore === "string") {
+        const storeUrl = options.channelStore;
+        void fetchChannelStore(storeUrl).then((mock) => {
+            if (mock) {
+                deviceData.channelStore = mock;
+            }
+            // Replace the URL so the retry below does not fetch again.
+            options.channelStore = mock;
+            startApp(filePath, fileData, options, deepLink);
+        });
+        return;
+    }
+    if (options.channelStore && typeof options.channelStore === "object") {
+        deviceData.channelStore = options.channelStore as ChannelStoreMock;
+    }
     setupCurrentApp(filePath);
     const fileName = filePath.split(/.*[\/|\\]/)[1] ?? filePath;
     const fileExt = filePath.split(".").pop()?.toLowerCase();
@@ -463,6 +482,28 @@ function startApp(filePath: string, fileData: any, options: any, deepLink?: Map<
         loadAppZip(fileName, fileData, runApp, currentApp.password);
     } else {
         loadSourceCode(fileName, fileData);
+    }
+}
+
+/**
+ * Loads a channel-store mock from a URL. A failed load leaves the catalog empty.
+ * @param url Path or URL of the JSON file, resolved by `fetch`.
+ */
+async function fetchChannelStore(url: string): Promise<ChannelStoreMock | undefined> {
+    try {
+        const response = await fetch(url);
+        if (!response.ok) {
+            throw new Error(`${response.status} ${response.statusText}`);
+        }
+        const parsed: unknown = await response.json();
+        if (parsed == null || typeof parsed !== "object" || Array.isArray(parsed)) {
+            throw new Error("expected a JSON object");
+        }
+        return parsed as ChannelStoreMock;
+    } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        apiException("warning", `[api] Unable to load channel store mock from ${url}: ${message}`);
+        return undefined;
     }
 }
 

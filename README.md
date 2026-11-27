@@ -73,6 +73,7 @@ The Node.js package includes a complete CLI application, ECP and SSDP servers, a
 - **Keyboard Remote** - The keyboard acts as the Roku remote control while the app runs
 - **Logs and Snapshots** - Redirect text output to a file (`--log`) and save the screen as PNG (`--snapshot`)
 - **ECP Server** - External Control Protocol implementation
+- **Channel Store mock** - Exercise in-app purchases with `--channel-store` (see the [CLI guide](./docs/run-as-cli.md#mocking-in-app-purchases))
 - **Package Creation** - Build and encrypt `.bpk` files
 - **CI/CD Integration** - Perfect for automated testing
 

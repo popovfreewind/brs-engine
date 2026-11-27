@@ -237,11 +237,14 @@ export class ChannelStore extends Node {
             }
             case "getcatalog":
             case "getstorecatalog":
-                this.setStoreData("GetCatalog", command === "getcatalog" ? "catalog" : "storeCatalog");
+                this.setStoreData(
+                    command === "getcatalog" ? "GetCatalog" : "GetStoreCatalog",
+                    command === "getcatalog" ? "catalog" : "storeCatalog"
+                );
                 break;
             case "getpurchases":
             case "getallpurchases":
-                this.setStoreData("GetPurchases", "purchases");
+                this.setStoreData(command === "getpurchases" ? "GetPurchases" : "GetAllPurchases", "purchases");
                 break;
             case "doorder":
                 // The only command that reads the order, so it is the only one that has to re-derive
@@ -305,6 +308,8 @@ export class ChannelStore extends Node {
         const catalog = this.channelStore.getProductData(command, status);
         result.setValueSilent("status", new Int32(status.code));
         result.setValueSilent("message", new BrsString(status.message));
+        // The reference names this `statusMessage`. `message` is the field this node already publishes.
+        result.setValueSilent("statusMessage", new BrsString(status.message));
         for (const item of catalog) {
             result.appendChildToParent(toContentNode(item));
         }
@@ -334,6 +339,7 @@ export class ChannelStore extends Node {
         const order = this.channelStore.placeOrder(status);
         result.setValueSilent("status", new Int32(status.code));
         result.setValueSilent("message", new BrsString(status.message));
+        result.setValueSilent("statusMessage", new BrsString(status.message));
         for (const item of order) {
             result.appendChildToParent(toContentNode(item));
         }

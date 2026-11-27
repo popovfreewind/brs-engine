@@ -32,6 +32,7 @@ import {
     ChannelCredInitialSize,
     ChannelCredMaxSize,
 } from "../common";
+import { configureChannelStore } from "./ChannelStoreCatalog";
 import { collectGraphicsData } from "./Graphics";
 import SharedObject from "../SharedObject";
 import { FileSystem } from "./FileSystem";
@@ -418,6 +419,12 @@ export class BrsDevice {
         this.timeZone = BrsDevice.deviceInfo.timeZone;
         this.locale = BrsDevice.deviceInfo.locale.replace("_", "-");
         this.tracking = BrsDevice.deviceInfo.debugOnCrash === true;
+        // A new device configuration starts the purchase session from the host's mock (or an
+        // empty catalog). Purchases recorded later in this run stay until the next configuration.
+        const storeWarning = configureChannelStore(this.deviceInfo.channelStore);
+        if (storeWarning) {
+            this.stderr.write(`warning,${storeWarning}`);
+        }
     }
 
     /**

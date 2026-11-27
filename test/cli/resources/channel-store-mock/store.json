@@ -1,0 +1,35 @@
+{
+    "orderResult": "success",
+    "products": [
+        {
+            "code": "test_product_1",
+            "name": "Test Product",
+            "price": "$0.99",
+            "productType": "Consumable"
+        },
+        {
+            "code": "test_product_2",
+            "name": "Test Subscription",
+            "price": "$4.99",
+            "productType": "MonthlySub"
+        }
+    ],
+    "purchases": [
+        {
+            "code": "test_product_2",
+            "name": "Test Subscription",
+            "price": "$4.99",
+            "productType": "MonthlySub",
+            "qty": 1,
+            "status": "Valid"
+        },
+        {
+            "code": "test_product_1",
+            "name": "Test Product",
+            "price": "$0.99",
+            "productType": "Consumable",
+            "qty": 1,
+            "status": "Invalid"
+        }
+    ]
+}

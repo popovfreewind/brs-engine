@@ -7,6 +7,7 @@ const {
     BrsDevice,
     ChannelCredMaxDataSize,
     BrsString,
+    configureChannelStore,
     Double,
     Float,
     Int32,
@@ -70,6 +71,7 @@ describe("ChannelStore mocked commands", () => {
     // one store instance, so clear it around every test.
     beforeEach(() => {
         Field.resetDispatch();
+        configureChannelStore(undefined);
         new RoChannelStore().storeCredData("");
     });
 
@@ -201,6 +203,52 @@ describe("ChannelStore mocked commands", () => {
             store.setNewOrder([toAssociativeArray({ code: "A", qty: "2" })]);
             expect(store.setDeltaOrder("A", 1)).toBe(1);
             expect(store.getOrderItems()).toHaveLength(1);
+        });
+    });
+
+    describe("session catalog when fakeServer is off", () => {
+        const mock = {
+            products: [{ code: "test_product_1", name: "Test Product", price: "$0.99", productType: "Consumable" }],
+            purchases: [
+                {
+                    code: "test_product_1",
+                    name: "Test Product",
+                    price: "$0.99",
+                    productType: "Consumable",
+                    status: "Invalid",
+                },
+            ],
+            orderResult: "cancel",
+        };
+
+        test("getCatalog succeeds and getAllPurchases keeps expired rows", () => {
+            configureChannelStore(mock);
+            const node = new ChannelStore();
+            send(node, "command", new BrsString("getCatalog"));
+            const catalog = node.getValue("catalog");
+            expect(catalog.getValue("status").getValue()).toBe(1);
+            expect(catalog.getValue("statusMessage").getValue()).toBe("Success");
+            expect(catalog.getNodeChildren()[0].getValue("cost").getValue()).toBe("$0.99");
+
+            send(node, "command", new BrsString("getAllPurchases"));
+            const purchases = node.getValue("purchases");
+            expect(purchases.getValue("status").getValue()).toBe(1);
+            expect(purchases.getNodeChildren()[0].getValue("status").getValue()).toBe("Invalid");
+        });
+
+        test("a canceled doOrder reports Interrupted and leaves the remote free", () => {
+            configureChannelStore(mock);
+            BrsDevice.lastKey = 6;
+            BrsDevice.lastMod = 0;
+            const node = new ChannelStore();
+            node.setValue("order", contentNode({ code: "test_product_1", qty: 1 }));
+            send(node, "command", new BrsString("doOrder"));
+            const status = node.getValue("orderStatus");
+            expect(status.getValue("status").getValue()).toBe(2);
+            expect(status.getValue("message").getValue()).toBe("Interrupted");
+            expect(status.getNodeChildren()).toHaveLength(0);
+            expect(BrsDevice.lastKey).toBe(-1);
+            expect(BrsDevice.lastMod).toBe(-1);
         });
     });
 

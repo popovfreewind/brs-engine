@@ -51,6 +51,7 @@ import {
     ExtVolInitialSize,
     ExtVolMaxSize,
     LogLevel,
+    ChannelStoreMock,
 } from "../core/common";
 import SharedObject from "../core/SharedObject";
 import { encryptPackage } from "../core/packageEncryption";
@@ -106,6 +107,10 @@ program
     .option("-x, --ext-vol <path>", "Path to directory or zip file from which `ext1:` will be mounted.")
     .option("-k, --deep-link <params>", "Parameters to be passed to the application. (format: key=value,...)")
     .option("-y, --registry", "Persist the simulated device registry (and channel credentials) on disk.", false)
+    .option(
+        "--channel-store <file>",
+        "JSON file of in-app products and purchases for roChannelStore when fakeServer is off."
+    )
     .action(async (brsFiles, program) => {
         if (typeof program.image === "string" && !isNumber(program.image)) {
             // `-i <file>`: commander consumed the app path as the optional [percent]
@@ -142,6 +147,9 @@ program
             if (program.registry) {
                 deviceData.registry = getRegistry();
                 deviceData.channelCredentials = getChannelCredentials();
+            }
+            if (!loadChannelStoreOption(program.channelStore)) {
+                return;
             }
             deviceData.appList = new Array<AppData>();
         }
@@ -253,6 +261,39 @@ function checkParameters() {
         return;
     }
     return process.exitCode !== 1;
+}
+
+/**
+ * Loads the in-app purchase mock onto the device, or leaves the catalog empty when no file was given.
+ * @param file Path passed to `--channel-store`, if any.
+ * @returns False when the file is missing or is not JSON, so the process should stop.
+ */
+function loadChannelStoreOption(file?: string): boolean {
+    if (!file) {
+        deviceData.channelStore = undefined;
+        return true;
+    }
+    const storePath = path.resolve(file);
+    if (!fs.existsSync(storePath)) {
+        console.error(chalk.red(`Channel store file not found: ${file}\n`));
+        process.exitCode = 1;
+        return false;
+    }
+    try {
+        const parsed: unknown = JSON.parse(fs.readFileSync(storePath, "utf8"));
+        if (parsed == null || typeof parsed !== "object" || Array.isArray(parsed)) {
+            console.error(chalk.red(`Channel store file must be a JSON object: ${file}\n`));
+            process.exitCode = 1;
+            return false;
+        }
+        deviceData.channelStore = parsed as ChannelStoreMock;
+        return true;
+    } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error(chalk.red(`Unable to read channel store file: ${message}\n`));
+        process.exitCode = 1;
+        return false;
+    }
 }
 
 /**

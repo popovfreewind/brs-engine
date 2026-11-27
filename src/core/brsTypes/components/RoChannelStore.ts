@@ -21,6 +21,13 @@ import { ChannelCredMaxDataSize, genHexAddress } from "../../common";
 import { XmlDocument, XmlElement, XmlNode } from "xmldoc";
 import { IfSetMessagePort, IfGetMessagePort } from "../interfaces/IfMessagePort";
 import { BrsDevice } from "../../device/BrsDevice";
+import {
+    channelStoreCatalogRecords,
+    channelStoreOrderOutcome,
+    channelStoreProduct,
+    channelStorePurchaseRecords,
+    recordChannelStorePurchase,
+} from "../../device/ChannelStoreCatalog";
 import { v5 as uuidv5 } from "uuid";
 
 /**
@@ -140,16 +147,40 @@ export class RoChannelStore extends BrsComponent implements BrsValue {
     }
 
     getProductData(type: string, status: { code: number; message: string }) {
-        let catalog: RoAssociativeArray[] = [];
-        if (this.fakeServerEnabled) {
-            catalog = this.getFakeProductData(type);
-            status.code = 1;
-            status.message = "Items Received";
+        if (!this.fakeServerEnabled) {
+            return this.sessionProductData(type, status);
+        }
+        // fakeServer reads pkg:/csfake/<command>.xml. Store-wide and historical queries share
+        // the channel catalog and purchase fixtures.
+        const xmlName = type === "GetStoreCatalog" ? "GetCatalog" : type === "GetAllPurchases" ? "GetPurchases" : type;
+        const catalog = this.getFakeProductData(xmlName);
+        status.code = 1;
+        status.message = "Items Received";
+        return catalog;
+    }
+
+    /**
+     * Catalog and purchase lists for a channel that did not call `fakeServer(true)`.
+     * An empty mock is a successful empty list (status 1), matching a device with no products.
+     */
+    private sessionProductData(type: string, status: { code: number; message: string }) {
+        const records =
+            type === "GetPurchases" || type === "GetAllPurchases"
+                ? channelStorePurchaseRecords(type === "GetAllPurchases")
+                : channelStoreCatalogRecords();
+        status.code = 1;
+        status.message = "Success";
+        const catalog: RoAssociativeArray[] = [];
+        for (const record of records) {
+            catalog.push(toAssociativeArray(record));
         }
         return catalog;
     }
 
     placeOrder(status: { code: number; message: string }) {
+        if (!this.fakeServerEnabled) {
+            return this.placeSessionOrder(status);
+        }
         let order: RoAssociativeArray[] = [];
         // An empty cart can never be ordered — `DoOrder()` guards this too, but the guard has to live
         // here as well or the fake order XML's items get reported as purchased for an empty order.
@@ -180,6 +211,98 @@ export class RoChannelStore extends BrsComponent implements BrsValue {
             }
         }
         return order;
+    }
+
+    /**
+     * Completes `DoOrder` from the host mock. A successful order is appended to the session
+     * purchase list. Every outcome releases the remote: see {@link finishSessionOrder}.
+     */
+    private placeSessionOrder(status: { code: number; message: string }): RoAssociativeArray[] {
+        const lines = this.sessionOrderLines();
+        if (!lines) {
+            return this.finishSessionOrder(status, -4, "Invalid request");
+        }
+        const outcome = channelStoreOrderOutcome();
+        if (outcome === "cancel") {
+            return this.finishSessionOrder(status, 2, "Interrupted");
+        }
+        if (outcome === "failure") {
+            return this.finishSessionOrder(status, -3, "Unknown Error");
+        }
+        const response: RoAssociativeArray[] = [];
+        for (const line of lines) {
+            const purchaseId = recordChannelStorePurchase({
+                code: line.code,
+                name: line.name,
+                price: line.price,
+                productType: line.productType,
+                qty: line.qty,
+            });
+            response.push(
+                toAssociativeArray({
+                    amount: line.price,
+                    code: line.code,
+                    purchaseId,
+                    qty: line.qty,
+                    total: line.price,
+                })
+            );
+        }
+        this.setNewOrder([]);
+        return this.finishSessionOrder(status, 1, "Success", response);
+    }
+
+    /**
+     * Writes the order status and releases any remote key the purchase screen was holding.
+     *
+     * `DoOrder` replaces the system purchase screen, which takes the remote until the customer
+     * confirms or backs out. Channels start that screen from the Select press on a focused
+     * button, so the key is still down when the order completes. Leaving it down makes the next
+     * ECP Select (the same key code) look like a repeat of the held key: `updateKeysBuffer`
+     * drops the press and only delivers the later key-up, and the button never fires. That
+     * happens for a cancel and a failure the same way it would for a success, so every outcome
+     * releases the key.
+     */
+    private finishSessionOrder(
+        status: { code: number; message: string },
+        code: number,
+        message: string,
+        items: RoAssociativeArray[] = []
+    ): RoAssociativeArray[] {
+        status.code = code;
+        status.message = message;
+        BrsDevice.resetKeysBuffer();
+        return items;
+    }
+
+    /** Order lines with catalog name, price and product type filled in, or undefined when the cart is not orderable. */
+    private sessionOrderLines():
+        | { code: string; name: string; price: string; productType: string; qty: number }[]
+        | undefined {
+        if (this.order.length === 0) {
+            return undefined;
+        }
+        const lines: { code: string; name: string; price: string; productType: string; qty: number }[] = [];
+        for (const item of this.order) {
+            const code = RoChannelStore.textField(item, "code");
+            if (code === "") {
+                return undefined;
+            }
+            const qtyValue = item.get(new BrsString("qty"));
+            const qty = isAnyNumber(qtyValue) ? jsValueOf(qtyValue) : 1;
+            if (qty <= 0) {
+                return undefined;
+            }
+            const product = channelStoreProduct(code);
+            lines.push({
+                code,
+                name: product?.name ?? code,
+                price: product?.price ?? "$0.00",
+                productType: product?.productType ?? "Consumable",
+                qty,
+            });
+        }
+        return lines;
     }
 
     /**
@@ -649,7 +772,7 @@ ZZwGPYCKEHMPrIOOXJ-S9ZjArgaEpBUpMXWJibFxnkpVUVzbC22GEaqz_SjOJXFMQU7TaCKkDeCYVKyl
         impl: (_: Interpreter) => {
             if (this.port) {
                 const status = { code: -4, message: "Empty List" };
-                const catalog = this.getProductData("GetCatalog", status);
+                const catalog = this.getProductData("GetStoreCatalog", status);
                 this.port.pushMessage(new RoChannelStoreEvent(this.id, catalog, status));
             }
             return BrsInvalid.Instance;
@@ -681,7 +804,7 @@ ZZwGPYCKEHMPrIOOXJ-S9ZjArgaEpBUpMXWJibFxnkpVUVzbC22GEaqz_SjOJXFMQU7TaCKkDeCYVKyl
         impl: (_: Interpreter) => {
             if (this.port) {
                 const status = { code: -4, message: "Empty List" };
-                const purchases = this.getProductData("GetPurchases", status);
+                const purchases = this.getProductData("GetAllPurchases", status);
                 this.port.pushMessage(new RoChannelStoreEvent(this.id, purchases, status));
             }
             return BrsInvalid.Instance;
@@ -750,10 +873,11 @@ ZZwGPYCKEHMPrIOOXJ-S9ZjArgaEpBUpMXWJibFxnkpVUVzbC22GEaqz_SjOJXFMQU7TaCKkDeCYVKyl
             if (!this.port) {
                 return BrsBoolean.False;
             }
-            // placeOrder rejects an empty cart itself; the fakeServer check has to stay here, or with
-            // fakeServer off but a csfake/ folder present it would report "Invalid Product Order".
+            // placeOrder chooses the source: pkg:/csfake XML while fakeServer is on, and the host
+            // mock otherwise. The check lives in placeOrder so a csfake/ folder is not consulted
+            // for a channel that never enabled fakeServer.
             const status = { code: -3, message: "Invalid Order" };
-            const order = this.fakeServerEnabled ? this.placeOrder(status) : [];
+            const order = this.placeOrder(status);
             this.port.pushMessage(new RoChannelStoreEvent(this.id, order, status));
             return BrsBoolean.from(status.code === 1);
         },
