@@ -67,6 +67,8 @@ Individual packages can also be built on their own:
 > [!IMPORTANT]
 >
 > The **brs-scenegraph** build produces the merged `assets/common.zip` (core assets plus the SceneGraph fonts and imagery) and copies it over the one in the other two packages. Because of that, always build it **last** — running `npm run build:node` on its own downgrades the node package to a core-only `common.zip`. The `build`, `build:cli` and `build:web` targets already order this correctly.
+>
+> Run `npm run build:api` before `npm run build:cli`. The scenegraph build also copies `brs-sg.js` into `packages/browser/lib/`, which `build:api` creates. `build:cli` builds the Node package and then scenegraph; it does not build the browser package first, so the scenegraph step fails when that directory is missing.
 
 ### Release
 

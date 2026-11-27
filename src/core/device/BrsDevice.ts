@@ -739,9 +739,17 @@ export class BrsDevice {
             return this.updateKeysBufferPerRemote(nextKey);
         }
         if (nextKey.key === this.lastKey) {
-            return;
-        }
-        if (this.singleKeyEvents) {
+            // A second *press* of the key that is still logically down is a new click, not a
+            // keyboard auto-repeat (those are filtered before they reach this buffer). ECP
+            // `keypress` is exactly that shape: key down, then key up 300ms later. If the previous
+            // Select is still down — the system purchase screen took the remote, and its key-up
+            // never reached this thread — dropping the down delivers only the later key-up and the
+            // channel never sees the press. Deliver the press now and queue the release behind it.
+            if (!(this.singleKeyEvents && nextKey.mod === 0 && this.lastMod === 0)) {
+                return;
+            }
+            this.keysBuffer.unshift({ ...nextKey, key: nextKey.key + 100, mod: 100 });
+        } else if (this.singleKeyEvents) {
             if (nextKey.mod === 0) {
                 if (this.lastMod === 0) {
                     this.keysBuffer.unshift({ ...nextKey });
@@ -767,9 +775,13 @@ export class BrsDevice {
     private static updateKeysBufferPerRemote(nextKey: KeyEvent): KeyEvent | undefined {
         const state = this.perRemoteState.get(nextKey.remote) ?? { key: -1, mod: -1 };
         if (nextKey.key === state.key) {
-            return;
-        }
-        if (this.singleKeyEvents) {
+            // Same rule as the single-remote path: a new press of this remote's held key is a
+            // click. Queue the release and deliver the press.
+            if (!(this.singleKeyEvents && nextKey.mod === 0 && state.mod === 0)) {
+                return;
+            }
+            this.keysBuffer.unshift({ ...nextKey, key: nextKey.key + 100, mod: 100 });
+        } else if (this.singleKeyEvents) {
             if (nextKey.mod === 0) {
                 if (state.mod === 0) {
                     this.keysBuffer.unshift({ ...nextKey });

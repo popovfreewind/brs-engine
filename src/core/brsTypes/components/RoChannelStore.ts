@@ -259,9 +259,10 @@ export class RoChannelStore extends BrsComponent implements BrsValue {
      * confirms or backs out. Channels start that screen from the Select press on a focused
      * button, so the key is still down when the order completes. Leaving it down makes the next
      * ECP Select (the same key code) look like a repeat of the held key: `updateKeysBuffer`
-     * drops the press and only delivers the later key-up, and the button never fires. That
-     * happens for a cancel and a failure the same way it would for a success, so every outcome
-     * releases the key.
+     * would otherwise drop the press and only deliver the later key-up, and the button never
+     * fires. Releasing here covers the thread that ran the order. A Select that is still down
+     * on the thread that reads ECP keys is delivered as a new press anyway — see
+     * `BrsDevice.updateKeysBuffer`. Every outcome releases the key, not only success.
      */
     private finishSessionOrder(
         status: { code: number; message: string },
