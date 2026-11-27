@@ -67,6 +67,17 @@ describe("BrsDevice controller support", () => {
             }
         );
 
+        test("an ECP Select pressed again while Select is still down is delivered as a press", () => {
+            writeKeySlot(sharedArray, 0, RemoteType.ECP, 0, 6, 0);
+            expect(BrsDevice.updateKeysBuffer()).toEqual({ remote: "ECP:0", key: 6, mod: 0 });
+
+            // Host keypress: down immediately, up 300ms later. Both can be waiting if the
+            // interpreter did not poll in between, and the first Select was never released.
+            writeKeySlot(sharedArray, 0, RemoteType.ECP, 0, 6, 0);
+            writeKeySlot(sharedArray, 1, RemoteType.ECP, 0, 6, 100);
+            expect(BrsDevice.updateKeysBuffer()).toEqual({ remote: "ECP:0", key: 6, mod: 0 });
+        });
+
         test(
             "(pinned pre-existing behavior) a duplicate key code from a different remote is " +
                 "not delivered, and its shared-array slot is left uncleared (leaked) rather than " +
@@ -120,6 +131,16 @@ describe("BrsDevice controller support", () => {
             writeKeySlot(sharedArray, 1, RemoteType.BT, 2, 6, 0); // same code, different remote
             expect(BrsDevice.updateKeysBuffer()).toEqual({ remote: "BT:1", key: 6, mod: 0 });
             expect(BrsDevice.updateKeysBuffer()).toEqual({ remote: "BT:2", key: 6, mod: 0 });
+        });
+
+        test("a new press of a key this remote is still holding is delivered", () => {
+            writeKeySlot(sharedArray, 0, RemoteType.BT, 1, 6, 0);
+            expect(BrsDevice.updateKeysBuffer()).toEqual({ remote: "BT:1", key: 6, mod: 0 });
+
+            // Down and up of the same key, both waiting, while that key is still held.
+            writeKeySlot(sharedArray, 0, RemoteType.BT, 1, 6, 0);
+            writeKeySlot(sharedArray, 1, RemoteType.BT, 1, 6, 100);
+            expect(BrsDevice.updateKeysBuffer()).toEqual({ remote: "BT:1", key: 6, mod: 0 });
         });
 
         test("resetKeysBuffer() clears per-remote debounce state", () => {

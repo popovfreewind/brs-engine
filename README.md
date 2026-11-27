@@ -102,6 +102,10 @@ Read more about the shared extension model in [docs/extensions.md](./docs/extens
 There are many ways you can use and/or participate in the project, read the documents below to learn more:
 
 - [How to build from source](docs/build-from-source.md)
+
+> [!IMPORTANT]
+> Run `npm run build:api` before `npm run build:cli`. The scenegraph build copies its browser bundle into `packages/browser/lib/`, and that directory is created by `build:api`. `build:cli` alone does not create it, so the scenegraph build fails if the browser package has not been built yet.
+
 - [How add the Engine to a Web Application](docs/integrating.md)
 - [How to run as a Command Line Interface](docs/run-as-cli.md)
 - [How to run Rooibos unit tests with the CLI](docs/rooibos-testing.md)

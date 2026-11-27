@@ -205,6 +205,55 @@ describe("roChannelStore session mock", () => {
         expect(BrsDevice.updateKeysBuffer()).toEqual({ remote: "ECP:0", key: SELECT, mod: 0 });
     });
 
+    test.each(["success", "cancel", "failure"])(
+        "an ECP Select sent after orderResult %s is delivered as a press",
+        (orderResult) => {
+            // The Select that opened the order is still down. Its key-up arrives after the
+            // order (ECP sends it 300ms later) and must not re-hold the key. The next
+            // keypress — down and up both waiting, the way the host writes them when the
+            // interpreter has been busy — has to come through as a press.
+            configureChannelStore({ ...testCatalog, orderResult });
+            const { store } = storeWithPort();
+            setOrder(store, "test_product_1");
+            BrsDevice.lastKey = SELECT;
+            BrsDevice.lastMod = 0;
+            store.getMethod("doOrder").call(interpreter);
+
+            writeKeySlot(sharedArray, 0, SELECT, 100);
+            expect(BrsDevice.updateKeysBuffer()).toBeUndefined();
+            expect(BrsDevice.lastMod).toBe(-1);
+
+            writeKeySlot(sharedArray, 0, SELECT, 0);
+            writeKeySlot(sharedArray, 1, SELECT, 100);
+            expect(BrsDevice.updateKeysBuffer()).toEqual({ remote: "ECP:0", key: SELECT, mod: 0 });
+        }
+    );
+
+    test.each(["success", "cancel", "failure"])(
+        "a held Select after orderResult %s does not swallow the next ECP Select",
+        (orderResult) => {
+            // resetKeysBuffer() runs on the thread that finished the order. The thread that
+            // reads ECP keys can still see the opening Select as down (its key-up never
+            // arrived). The next keypress is the same code: down, then up.
+            configureChannelStore({ ...testCatalog, orderResult });
+            const { store } = storeWithPort();
+            setOrder(store, "test_product_1");
+            store.getMethod("doOrder").call(interpreter);
+            BrsDevice.lastKey = SELECT;
+            BrsDevice.lastMod = 0;
+            writeKeySlot(sharedArray, 0, SELECT, 0);
+            writeKeySlot(sharedArray, 1, SELECT, 100);
+
+            expect(BrsDevice.updateKeysBuffer()).toEqual({ remote: "ECP:0", key: SELECT, mod: 0 });
+            // The queued release leaves the key up, so another Select is a press too.
+            BrsDevice.updateKeysBuffer();
+            BrsDevice.updateKeysBuffer();
+            writeKeySlot(sharedArray, 0, SELECT, 0);
+            writeKeySlot(sharedArray, 1, SELECT, 100);
+            expect(BrsDevice.updateKeysBuffer()).toEqual({ remote: "ECP:0", key: SELECT, mod: 0 });
+        }
+    );
+
     test("a failed order releases a held Select before the next press", () => {
         configureChannelStore({ ...testCatalog, orderResult: "failure" });
         const { store } = storeWithPort();
